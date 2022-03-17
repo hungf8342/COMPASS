@@ -10,23 +10,23 @@
   ttt <- 2000 ## The step size in mode search (fixed)
   SS <- 1L
 
-  N_s <- rowSums(n_s)
-  N_u <- rowSums(n_u)
+  N_s <- rowSums(n_s) #total stimulated cells for each individual
+  N_u <- rowSums(n_u) #total unstimulated cells for each individual
 
-  I <- nrow(n_s)
-  K <- ncol(n_u)
+  I <- nrow(n_s) #number of individuals with stimulated samples
+  K <- ncol(n_u) #number of subsets
   K1 <- K - 1L
 
-  #Iniitalize every subset and subject as a responder
+  #Gamma matrix: initalize subset/subject pairs as responders (1)
   if (!init_with_fisher) {
-    indi = array(1, dim = c(I, K)) # 0 indicate that gamma_ik=0
+    indi = array(1, dim = c(I, K)) # 0 indicates that gamma_ik=0
     for (k in 1:K1) {
-      #non-responders when p_u >= p_s
+      #mark subset/subject pairs as non-responders when p_u >= p_s
       l2 = which((n_s[, k] / N_s) - (n_u[, k] / N_u) <= 0)
       indi[l2, k] <- 0;
     }
   }
-  #alternately initialize indicators from Fisher's test.
+  #Gamma matrix: alternately initialize indicators from Fisher's test.
   if (init_with_fisher) {
     indi = array(0, dim = c(I, K)) # 0 indicate that gamma_ik=0
     for (k in 1:K1) {
@@ -35,18 +35,20 @@
       }
     }
   }
+
+  #Gamma Kth subset: sum of indicators from other subsets (TODO why?)
   indi[, K] <- rowSums(indi[, 1:K1, drop = FALSE])
   indi <- matrix(as.integer(indi), nrow = I)
 
   #############################################
-  mk = array(as.integer(0), dim = c(1, K1));
+  mk = array(as.integer(0), dim = c(1, K1)); #like Gamma, but all 0's (TODO Why?)
   Istar = 0;
   mKstar = 0;
 
-  gamma = array(as.integer(0), dim = c(I, K, N));
+  gamma = array(as.integer(0), dim = c(I, K, N)); #Storage for all Gamma iterations
 
-  alpha_u = array(0, dim = c(N, K));
-  alpha_s = array(0, dim = c(N, K));
+  alpha_u = array(0, dim = c(N, K)); #Storage for all alpha_u
+  alpha_s = array(0, dim = c(N, K)); #Storage for all alpha_s
 
   varp_s1 = array(sqrt(5), dim = c(K, 1)); # variance of the proposal distribution 1 for alpha_s
   # sqrt(var)
@@ -61,17 +63,19 @@
   varp_u = array(sqrt(10), dim = c(K, 1)); #variance of the proposal distribution for alpha_u
 
   pp = array(0.65, dim = c(I, 1))
-  pb1 <- clamp(1.5 / median(indi[, K]), 0, 0.9)
+  pb1 <- clamp(1.5 / median(indi[, K]), 0, 0.9) #RCPP making vector min 0 and max 0.9
   pb2 <- clamp(5.0 / median(indi[, K]), 0, 0.9)
-  lambda_s = rep(0, K);  
+
+  #initialize lambda_s to 0.1*max(N_s,N_u) except for for kth subset
+  lambda_s = rep(0, K);
   lambda_s[1:K1] = (10 ^ -2) * max(N_s, N_u)
   lambda_s[K] = max(N_s, N_u) - sum(lambda_s[1:K1])
   lambda_u = lambda_s
 
-  alpha_u[1, 1:(K - 1)] = 10 #initializaion 
+  alpha_u[1, 1:(K - 1)] = 10 #initializaion of alpha_u
   alpha_u[1, K] = 150
 
-  alpha_s[1, 1:(K - 1)] = 10 #initialization 
+  alpha_s[1, 1:(K - 1)] = 10 #initialization of alpha_s
   alpha_s[1, K] = 100
 
   #################### acceptance rate ###########################
@@ -80,11 +84,11 @@
   A_alphas = array(as.integer(0), dim = c(K, N));
 
   vmessage("Computing initial parameter estimates...")
-  for (tt in 2:N) {
+  for (tt in 2:N) {   # tt is current iteration
 
     if (tt %% 1000 == 0) vmessage("Iteration ", tt, " of ", N, ".")
 
-    # update alphau
+    # update alphau (updatealphau_noPu_Exp_MH.C)
     #res2 <- .Call(C_updatealphau_noPu_Exp, alphaut = alpha_u[tt - 1,], n_s = n_s, n_u = n_u, I = I, K = K, lambda_u = lambda_u, var_p = varp_u, ttt = ttt, gammat = gamma[,, tt - 1])
     res2 <- .Call(C_updatealphau_noPu_Exp_MH, alphaut = alpha_u[tt - 1,], n_s = n_s, n_u = n_u, I = I, K = K, lambda_u = lambda_u, var_p = varp_u, gammat = gamma[,, tt - 1])
     if (length(alpha_u[tt, ]) != length(res2$alphau_tt)) {
@@ -94,10 +98,10 @@
     alpha_u[tt,] = res2$alphau_tt;
     A_alphau[, tt] = res2$Aalphau;
 
-    #update gamma
+    #update gamma (updategammak_noPu.C)
     res1 <- .Call(C_updategammak_noPu, n_s = n_s, n_u = n_u, gammat = gamma[,, tt - 1], I = I, K = K, SS = SS, alphau = alpha_u[tt,], alphas = alpha_s[tt - 1,], alpha = 1, mk = mk, Istar = Istar,
       mKstar = mKstar, pp = pp, pb1 = pb1, pb2 = pb2, indi = indi)
-    
+
     gamma[,, tt] = res1$gamma_tt;
     if (length(A_gm[, tt]) != length(res1$Ag)) {
       vmessage("res1 Ag length: ", length(res1$Ag), "\n")
@@ -157,7 +161,7 @@
 
   sNN = replications+1 ## number of 'replications' -- should be user defined +1 for burnin.
 
-  #start here
+  #start here (TODO Why?)
   alpha_u[1,] = alpha_u[N,]
   gamma[,, 1] = gamma[,, N]
   alpha_s[1,] = alpha_s[N,]

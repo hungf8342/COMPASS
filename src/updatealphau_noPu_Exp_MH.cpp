@@ -2,6 +2,7 @@
 extern "C" double digamma(double);
 
 // Standard MH algorithm for updating alpha_u
+// Takes current alpha_u, n_u, n_s, I, K, constant lambda_u, current var_p, current gamma
 
 // [[register]]
 RcppExport SEXP updatealphau_noPu_Exp_MH(SEXP alphaut, SEXP n_s, SEXP n_u,
@@ -32,25 +33,25 @@ RcppExport SEXP updatealphau_noPu_Exp_MH(SEXP alphaut, SEXP n_s, SEXP n_u,
   double sum_nusalphau = 0.0;
   double sum_nualphau = 0.0;
   double sums = 0.;
-  for (int kk = 0; kk < xK; kk++) {
+  for (int kk = 0; kk < xK; kk++) { //for each subset (k)
     // delF = 0.0;
     log1 = 0.0;
     log2 = 0.0;
-    sum_alphau = 0.0;
+    sum_alphau = 0.0; //reset sum of alpha_u to 0
     for (int s = 0; s < xK; s++) {
-      sum_alphau += xalphaut[s];
+      sum_alphau += xalphaut[s]; //get sum of alpha_u
     }
-    log2 -= xI * lgamma(xalphaut[kk]);
+    log2 -= xI * lgamma(xalphaut[kk]); //subtract I*log(gamma()) of alpha_u's kth entry
     // delF += xI * (digamma(sum_alphau) - digamma(xalphaut[kk]));
-    log2 += xI * lgamma(sum_alphau);
-    for (int i = 0; i < xI; i++) {
+    log2 += xI * lgamma(sum_alphau); //add I*log(gamma()) of summed alpha_u
+    for (int i = 0; i < xI; i++) { //for each individual (i)
       lp1 = 0;
-      for (int k = 0; k < xK; k++) {
+      for (int k = 0; k < xK; k++) { //count positive gamma entries for indiv i
         if (xgammat(i, k) == 1) {
           lp1 += 1;
         }
       }
-      lp0 = xK - lp1;
+      lp0 = xK - lp1; //number of 0-gamma entries for indiv i
       std::vector<int> p1(lp1);
       flag1 = 0;
       std::vector<int> p0(lp0);

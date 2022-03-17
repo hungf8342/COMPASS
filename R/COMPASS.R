@@ -210,6 +210,7 @@ COMPASS <- function(data, treatment, control, subset=NULL,
         return(output)
     }
 
+    ## get separate dfs for treatment and control samples
     y_s <- .get_data(data, treatment, "treatment")
     y_u <- .get_data(data, control, "control")
 
